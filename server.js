@@ -29,7 +29,8 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+// Express v5 path-to-regexp doesn't accept bare "*"; use a regex to match all for preflight
+app.options(/.*/, cors(corsOptions));
 
 // Ensure credentials header is present when needed
 app.use((req, res, next) => {
