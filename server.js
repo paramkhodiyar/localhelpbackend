@@ -36,7 +36,8 @@ app.use(
 );
 
 // Handle preflight requests properly
-app.options('*', cors());
+app.options(/.*/, cors());
+
 
 // ✅ 2. Health check
 app.get('/', (req, res) => {
