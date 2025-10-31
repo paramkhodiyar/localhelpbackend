@@ -27,50 +27,59 @@ exports.sendOTP = async (req, res) => {
     });
 
     // send email
-    await transporter.sendMail({
-        from: `"LocalHelp Support" <${process.env.MAIL_USER}>`,
-        to: email,
-        subject: "Your One-Time Password (OTP) for Login",
-        html: `
-          <div style="
-            font-family: Arial, sans-serif;
-            max-width: 480px;
-            margin: auto;
-            border: 1px solid #e0e0e0;
-            border-radius: 10px;
-            padding: 20px;
-            background-color: #fafafa;
-          ">
-            <h2 style="color: #2d3748; text-align: center;">🔒 Verify Your Login</h2>
-            <p style="font-size: 15px; color: #4a5568;">
-              Hello <b>${email.split('@')[0]}</b>,<br><br>
-              Use the following <b>One-Time Password (OTP)</b> to complete your login on <b>LocalHelp</b>.
-            </p>
+    try {
+        const info = await transporter.sendMail({
+          from: `"LocalHelp Support" <${process.env.MAIL_USER}>`,
+          to: email,
+          subject: "Your One-Time Password (OTP) for Login",
+          html: `
             <div style="
-              background-color: #3182ce;
-              color: white;
-              text-align: center;
-              font-size: 24px;
-              font-weight: bold;
-              letter-spacing: 3px;
-              padding: 15px;
-              border-radius: 8px;
-              margin: 20px 0;
+              font-family: Arial, sans-serif;
+              max-width: 480px;
+              margin: auto;
+              border: 1px solid #e0e0e0;
+              border-radius: 10px;
+              padding: 20px;
+              background-color: #fafafa;
             ">
-              ${otp}
+              <h2 style="color: #2d3748; text-align: center;">🔒 Verify Your Login</h2>
+              <p style="font-size: 15px; color: #4a5568;">
+                Hello <b>${email.split('@')[0]}</b>,<br><br>
+                Use the following <b>One-Time Password (OTP)</b> to complete your login on <b>LocalHelp</b>.
+              </p>
+              <div style="
+                background-color: #3182ce;
+                color: white;
+                text-align: center;
+                font-size: 24px;
+                font-weight: bold;
+                letter-spacing: 3px;
+                padding: 15px;
+                border-radius: 8px;
+                margin: 20px 0;
+              ">
+                ${otp}
+              </div>
+              <p style="font-size: 14px; color: #718096;">
+                This OTP is valid for <b>5 minutes</b>. Please do not share it with anyone.<br><br>
+                If you did not request this, please ignore this email or contact our support team immediately.
+              </p>
+              <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;">
+              <p style="font-size: 12px; color: #a0aec0; text-align: center;">
+                © ${new Date().getFullYear()} LocalHelp. All rights reserved.<br>
+                Need help? Contact us at <a href="mailto:${process.env.MAIL_USER}" style="color: #3182ce;">${process.env.MAIL_USER}</a>
+              </p>
             </div>
-            <p style="font-size: 14px; color: #718096;">
-              This OTP is valid for <b>5 minutes</b>. Please do not share it with anyone for your security.<br><br>
-              If you did not request this, please ignore this email or contact our support team immediately.
-            </p>
-            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;">
-            <p style="font-size: 12px; color: #a0aec0; text-align: center;">
-              © ${new Date().getFullYear()} LocalHelp. All rights reserved.<br>
-              Need help? Contact us at <a href="mailto:${process.env.MAIL_USER}" style="color: #3182ce;">${process.env.MAIL_USER}</a>
-            </p>
-          </div>
-        `,
-      });
+          `,
+        }, { timeout: 10000 }); // 10 seconds timeout
+      
+        console.log("✅ OTP email sent:", info.response);
+        return res.status(200).json({ message: "OTP sent successfully" });
+      } catch (error) {
+        console.error("❌ Error sending OTP:", error.message);
+        return res.status(500).json({ message: "Failed to send OTP. Try again later." });
+      }
+      
     res.status(200).json({ message: 'OTP sent successfully' });
   } catch (error) {
     console.error(error);
