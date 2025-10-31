@@ -8,14 +8,34 @@ const app = express();
 const prisma = new PrismaClient();
 
 app.use(express.json());
-app.use(cors({
-    origin: [
-      "https://localhelpfrontend.vercel.app", // your deployed frontend
-      "http://localhost:5173", // local dev
-    ],
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    credentials: true,
-  }));
+
+const allowedOrigins = [
+  "https://localhelpfrontend.vercel.app",
+  "http://localhost:5173",
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // allow server-to-server / curl
+    const isAllowed =
+      allowedOrigins.includes(origin) ||
+      /\.vercel\.app$/.test(origin); // allow vercel preview domains
+    return isAllowed ? callback(null, true) : callback(new Error('Not allowed by CORS'));
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
+// Ensure credentials header is present when needed
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Credentials', 'true');
+  next();
+});
 // Top-level health check
 app.get('/health', (req, res) => {
   res.status(200).json({ message: 'Health check ok' });
