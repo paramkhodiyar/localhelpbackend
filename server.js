@@ -10,16 +10,13 @@ const prisma = new PrismaClient();
 app.use(express.json());
 
 const allowedOrigins = [
-  "https://localhelpfrontend.vercel.app",
   "http://localhost:5173",
 ];
 
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true); // allow server-to-server / curl
-    const isAllowed =
-      allowedOrigins.includes(origin) ||
-      /\.vercel\.app$/.test(origin); // allow vercel preview domains
+    const isAllowed = allowedOrigins.includes(origin);
     return isAllowed ? callback(null, true) : callback(new Error('Not allowed by CORS'));
   },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],

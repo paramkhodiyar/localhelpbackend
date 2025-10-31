@@ -13,7 +13,7 @@ exports.sendOTP = async (req, res) => {
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min expiry
 
     // save to DB
-    await prisma.OTP.create({
+    await prisma.otp.create({
       data: { email, otp, expiresAt },
     });
 
@@ -75,11 +75,12 @@ exports.sendOTP = async (req, res) => {
             </div>
           `,
           }, { timeout: 10000 }); // 10 seconds timeout
-          console.log("✅ OTP email sent:", info.response);
+          console.log("✅ OTP email sent");
           return res.status(200).json({ message: "OTP sent successfully" });
         } else {
           console.log("📨 EMAIL CREDS MISSING - OTP:", otp, "to:", email);
-          return res.status(200).json({ message: "OTP generated (email not configured)", debugOtp: process.env.NODE_ENV === 'development' ? otp : undefined });
+          // Always include debugOtp when email transport is not configured to ease local testing
+          return res.status(200).json({ message: "OTP generated (email not configured)", debugOtp: otp });
         }
       } catch (error) {
         console.error("❌ Error sending OTP:", error.message);
@@ -96,7 +97,7 @@ exports.verifyOTP = async (req, res) => {
     try {
       const { email, otp } = req.body;
   
-      const record = await prisma.OTP.findFirst({
+      const record = await prisma.otp.findFirst({
         where: { email, otp },
         orderBy: { createdAt: 'desc' },
       });
@@ -106,7 +107,7 @@ exports.verifyOTP = async (req, res) => {
         return res.status(400).json({ error: 'OTP expired' });
   
       // (Optional) Delete OTP after verification
-      await prisma.OTP.delete({ where: { id: record.id } });
+      await prisma.otp.delete({ where: { id: record.id } });
   
       // Generate JWT for user
       const jwt = require('jsonwebtoken');

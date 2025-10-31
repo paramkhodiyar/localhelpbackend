@@ -25,7 +25,7 @@ model User {
   password  String
   createdAt DateTime @default(now())
 }
-model OTP {
+model Otp {
   id        Int      @id @default(autoincrement())
   email     String
   otp       String
