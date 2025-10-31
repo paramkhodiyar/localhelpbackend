@@ -11,12 +11,14 @@ app.use(express.json());
 
 const allowedOrigins = [
   "http://localhost:5173",
+  "https://localhelpfrontend.vercel.app",
 ];
 
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true); // allow server-to-server / curl
-    const isAllowed = allowedOrigins.includes(origin);
+    const isAllowed =
+      allowedOrigins.includes(origin) || /\.vercel\.app$/.test(origin);
     return isAllowed ? callback(null, true) : callback(new Error('Not allowed by CORS'));
   },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
