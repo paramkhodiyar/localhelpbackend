@@ -17,18 +17,21 @@ exports.sendOTP = async (req, res) => {
       data: { email, otp, expiresAt },
     });
 
-    // setup mail transporter
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
-      },
-    });
+    // setup mail transporter (fallback to console if creds missing)
+    const mailUser = process.env.MAIL_USER;
+    const mailPass = process.env.MAIL_PASS;
+    const canEmail = Boolean(mailUser && mailPass);
+    const transporter = canEmail
+      ? nodemailer.createTransport({
+          service: 'gmail',
+          auth: { user: mailUser, pass: mailPass },
+        })
+      : null;
 
-    // send email
+    // send email or fallback
     try {
-        const info = await transporter.sendMail({
+        if (transporter) {
+          const info = await transporter.sendMail({
           from: `"LocalHelp Support" <${process.env.MAIL_USER}>`,
           to: email,
           subject: "Your One-Time Password (OTP) for Login",
@@ -71,10 +74,13 @@ exports.sendOTP = async (req, res) => {
               </p>
             </div>
           `,
-        }, { timeout: 10000 }); // 10 seconds timeout
-      
-        console.log("✅ OTP email sent:", info.response);
-        return res.status(200).json({ message: "OTP sent successfully" });
+          }, { timeout: 10000 }); // 10 seconds timeout
+          console.log("✅ OTP email sent:", info.response);
+          return res.status(200).json({ message: "OTP sent successfully" });
+        } else {
+          console.log("📨 EMAIL CREDS MISSING - OTP:", otp, "to:", email);
+          return res.status(200).json({ message: "OTP generated (email not configured)", debugOtp: process.env.NODE_ENV === 'development' ? otp : undefined });
+        }
       } catch (error) {
         console.error("❌ Error sending OTP:", error.message);
         return res.status(500).json({ message: "Failed to send OTP. Try again later." });
@@ -90,7 +96,7 @@ exports.verifyOTP = async (req, res) => {
     try {
       const { email, otp } = req.body;
   
-      const record = await prisma.oTP.findFirst({
+      const record = await prisma.OTP.findFirst({
         where: { email, otp },
         orderBy: { createdAt: 'desc' },
       });
