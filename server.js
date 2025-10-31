@@ -8,13 +8,14 @@ const app = express();
 const prisma = new PrismaClient();
 
 app.use(express.json());
-app.use(
-    cors({
-      origin: "https://localhelpfrontend.vercel.app",
-      methods: ["GET", "POST", "PUT", "DELETE"],
-      credentials: true,
-    })
-  );
+app.use(cors({
+    origin: [
+      "https://localhelpfrontend.vercel.app", // your deployed frontend
+      "http://localhost:5173", // local dev
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
+  }));
 // Top-level health check
 app.get('/health', (req, res) => {
   res.status(200).json({ message: 'Health check ok' });
