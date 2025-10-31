@@ -11,7 +11,7 @@ exports.sendOTP = async (req, res) => {
     // generate 6-digit OTP
     const otp = crypto.randomInt(100000, 999999).toString();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min expiry
-
+    console.log(otp, expiresAt);
     // save to DB
     await prisma.otp.create({
       data: { email, otp, expiresAt },
