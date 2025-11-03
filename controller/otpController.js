@@ -8,30 +8,33 @@ exports.sendOTP = async (req, res) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email is required' });
 
-    // generate 6-digit OTP
+    // Generate 6-digit OTP
     const otp = crypto.randomInt(100000, 999999).toString();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min expiry
     console.log(otp, expiresAt);
-    // save to DB
+
+    // Save to DB
     await prisma.otp.create({
       data: { email, otp, expiresAt },
     });
 
-    // setup mail transporter (fallback to console if creds missing)
+    // Setup mail transporter (fallback to console if creds missing)
     const mailUser = process.env.MAIL_USER;
     const mailPass = process.env.MAIL_PASS;
     const canEmail = Boolean(mailUser && mailPass);
+
     const transporter = canEmail
       ? nodemailer.createTransport({
           service: 'gmail',
           auth: { user: mailUser, pass: mailPass },
+          socketTimeout: 10000, // ✅ moved timeout here
         })
       : null;
 
-    // send email or fallback
+    // Send email or fallback
     try {
-        if (transporter) {
-          const info = await transporter.sendMail({
+      if (transporter) {
+        const info = await transporter.sendMail({
           from: `"LocalHelp Support" <${process.env.MAIL_USER}>`,
           to: email,
           subject: "Your One-Time Password (OTP) for Login",
@@ -74,25 +77,29 @@ exports.sendOTP = async (req, res) => {
               </p>
             </div>
           `,
-          }, { timeout: 10000 }); // 10 seconds timeout
-          console.log("✅ OTP email sent");
-          return res.status(200).json({ message: "OTP sent successfully" });
-        } else {
-          console.log("📨 EMAIL CREDS MISSING - OTP:", otp, "to:", email);
-          // Always include debugOtp when email transport is not configured to ease local testing
-          return res.status(200).json({ message: "OTP generated (email not configured)", debugOtp: otp });
-        }
-      } catch (error) {
-        console.error("❌ Error sending OTP:", error.message);
-        return res.status(500).json({ message: "Failed to send OTP. Try again later." });
+        });
+
+        console.log("✅ OTP email sent:", info.messageId);
+        return res.status(200).json({ message: "OTP sent successfully" });
+      } else {
+        console.log("📨 EMAIL CREDS MISSING - OTP:", otp, "to:", email);
+        return res.status(200).json({
+          message: "OTP generated (email not configured)",
+          debugOtp: otp,
+        });
       }
-      
-    res.status(200).json({ message: 'OTP sent successfully' });
+    } catch (error) {
+      console.error("❌ Error sending OTP:", error.message);
+      return res
+        .status(500)
+        .json({ message: "Failed to send OTP. Try again later." });
+    }
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Error sending OTP' });
+    res.status(500).json({ error: "Error sending OTP" });
   }
 };
+
 exports.verifyOTP = async (req, res) => {
     try {
       const { email, otp } = req.body;
