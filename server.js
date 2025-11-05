@@ -1,56 +1,117 @@
+require('dotenv').config();
 const express = require('express');
-const dotenv = require('dotenv');
-const { PrismaClient } = require('@prisma/client');
-const authRoutes = require('./routes/authRoutes.js');
 const cors = require('cors');
+const authRoutes = require('./routes/authRoutes');
 
-dotenv.config();
 const app = express();
-const prisma = new PrismaClient();
+const PORT = process.env.PORT || 3000;
 
-// ✅ Define allowed origins
+// CORS Configuration for Render + Vercel Frontend
 const allowedOrigins = [
-  "http://localhost:5173",
-  "https://localhelpfrontend.vercel.app",
-];
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'https://localhelpfrontend.vercel.app',
+  process.env.FRONTEND_URL
+].filter(Boolean);
 
 const corsOptions = {
   origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
-    const isAllowed =
-      allowedOrigins.includes(origin) || /\.vercel\.app$/.test(origin);
-    return isAllowed ? callback(null, true) : callback(new Error('Not allowed by CORS'));
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || origin.endsWith('.vercel.app')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
   },
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
-  optionsSuccessStatus: 204,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin'
+  ],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 86400 // 24 hours
 };
 
-// ✅ CORS must come FIRST
+// Apply CORS before other middleware
 app.use(cors(corsOptions));
-app.options(/.*/, cors(corsOptions));
 
-app.use(express.json());
+// Handle preflight requests
+app.options('*', cors(corsOptions));
 
-// Health check routes
-app.get('/health', (req, res) => res.status(200).json({ message: 'Health check ok' }));
-app.get('/', (req, res) => res.status(200).json({ message: 'Health check ok' }));
+// Body parsing middleware
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ✅ Sample test route
-app.post('/test', async (req, res) => {
-  const { name } = req.body;
-  const test = await prisma.test.create({ data: { name } });
-  res.status(201).json(test);
+// Security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  next();
 });
 
-app.get('/getall', async (req, res) => {
-  const tests = await prisma.test.findMany();
-  res.status(200).json(tests);
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
 });
 
-// ✅ Auth routes
-app.use("/api/auth", authRoutes);
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'LocalHelp Backend API',
+    version: '1.0.0',
+    endpoints: {
+      auth: '/api/auth',
+      health: '/health'
+    }
+  });
+});
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+// API Routes
+app.use('/api/auth', authRoutes);
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ 
+    success: false,
+    message: 'Route not found',
+    path: req.originalUrl
+  });
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  
+  if (err.message === 'Not allowed by CORS') {
+    return res.status(403).json({
+      success: false,
+      message: 'CORS policy violation',
+      origin: req.headers.origin
+    });
+  }
+
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Allowed origins:`, allowedOrigins);
+});
