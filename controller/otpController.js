@@ -1,13 +1,22 @@
 const nodemailer = require('nodemailer');
+const { PrismaClient } = require('@prisma/client');
 
-// Store OTPs temporarily (in production, use Redis or database)
-const otpStore = new Map();
+const prisma = new PrismaClient();
+
+// Validate required environment variables
+const requiredEnvVars = ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASS'];
+const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingEnvVars.length > 0) {
+  console.error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
+  console.error('OTP functionality will not work without these variables');
+}
 
 // Configure nodemailer transporter
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT || 587,
-  secure: process.env.SMTP_PORT == 465, // true for 465, false for other ports
+  port: parseInt(process.env.SMTP_PORT) || 587,
+  secure: parseInt(process.env.SMTP_PORT) === 465,
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS
@@ -49,15 +58,39 @@ const sendOTP = async (req, res) => {
       });
     }
 
-    // Generate OTP
-    const otp = generateOTP();
-    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+    // Check for recent OTP (rate limiting - within last 60 seconds)
+    const recentOTP = await prisma.otp.findFirst({
+      where: {
+        email: email,
+        createdAt: {
+          gte: new Date(Date.now() - 60 * 1000) // Last 60 seconds
+        }
+      }
+    });
 
-    // Store OTP with expiration
-    otpStore.set(email, {
-      otp,
-      expiresAt,
-      attempts: 0
+    if (recentOTP) {
+      return res.status(429).json({
+        success: false,
+        message: 'Please wait 60 seconds before requesting a new OTP'
+      });
+    }
+
+    // Delete any existing OTPs for this email
+    await prisma.otp.deleteMany({
+      where: { email: email }
+    });
+
+    // Generate new OTP
+    const otp = generateOTP();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Store OTP in database
+    await prisma.otp.create({
+      data: {
+        email,
+        otp,
+        expiresAt
+      }
     });
 
     // Email options
@@ -104,7 +137,12 @@ const sendOTP = async (req, res) => {
     // Send email
     await transporter.sendMail(mailOptions);
 
-    console.log(`OTP sent to ${email}: ${otp} (Dev only log)`);
+    // Log OTP only in development
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`OTP sent to ${email}: ${otp}`);
+    } else {
+      console.log(`OTP sent to ${email}`);
+    }
 
     return res.status(200).json({
       success: true,
@@ -134,48 +172,53 @@ const verifyOTP = async (req, res) => {
       });
     }
 
-    // Get stored OTP
-    const storedData = otpStore.get(email);
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid email format'
+      });
+    }
 
-    if (!storedData) {
+    // Find the most recent OTP for this email
+    const storedOTP = await prisma.otp.findFirst({
+      where: { email: email },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (!storedOTP) {
       return res.status(400).json({
         success: false,
         message: 'OTP not found or expired. Please request a new one.'
       });
     }
 
-    // Check expiration
-    if (Date.now() > storedData.expiresAt) {
-      otpStore.delete(email);
+    // Check if OTP has expired
+    if (new Date() > storedOTP.expiresAt) {
+      // Delete expired OTP
+      await prisma.otp.delete({
+        where: { id: storedOTP.id }
+      });
+      
       return res.status(400).json({
         success: false,
         message: 'OTP has expired. Please request a new one.'
       });
     }
 
-    // Check attempts (prevent brute force)
-    if (storedData.attempts >= 5) {
-      otpStore.delete(email);
-      return res.status(429).json({
-        success: false,
-        message: 'Too many failed attempts. Please request a new OTP.'
-      });
-    }
-
     // Verify OTP
-    if (storedData.otp !== otp.toString()) {
-      storedData.attempts += 1;
-      otpStore.set(email, storedData);
-      
+    if (storedOTP.otp !== otp.toString().trim()) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid OTP',
-        attemptsRemaining: 5 - storedData.attempts
+        message: 'Invalid OTP. Please try again.'
       });
     }
 
-    // OTP verified successfully
-    otpStore.delete(email);
+    // OTP verified successfully - delete it
+    await prisma.otp.delete({
+      where: { id: storedOTP.id }
+    });
 
     return res.status(200).json({
       success: true,
@@ -194,17 +237,29 @@ const verifyOTP = async (req, res) => {
 };
 
 // Cleanup expired OTPs (run periodically)
-const cleanupExpiredOTPs = () => {
-  const now = Date.now();
-  for (const [email, data] of otpStore.entries()) {
-    if (now > data.expiresAt) {
-      otpStore.delete(email);
+const cleanupExpiredOTPs = async () => {
+  try {
+    const result = await prisma.otp.deleteMany({
+      where: {
+        expiresAt: {
+          lt: new Date() // Less than current time
+        }
+      }
+    });
+    
+    if (result.count > 0) {
+      console.log(`Cleaned up ${result.count} expired OTP(s)`);
     }
+  } catch (error) {
+    console.error('Error cleaning up expired OTPs:', error);
   }
 };
 
 // Run cleanup every 5 minutes
 setInterval(cleanupExpiredOTPs, 5 * 60 * 1000);
+
+// Cleanup on startup
+cleanupExpiredOTPs();
 
 module.exports = {
   sendOTP,
