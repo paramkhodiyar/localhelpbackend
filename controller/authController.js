@@ -6,7 +6,7 @@ const dotenv = require("dotenv");
 dotenv.config();
 const prisma = new PrismaClient();
 
-const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
+const JWT_SECRET = process.env.JWT_SECRET;
 
 function isValidEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);

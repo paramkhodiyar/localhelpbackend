@@ -17,6 +17,7 @@ const transEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
 exports.sendOTP = async (req, res) => {
   try {
     const { email } = req.body;
+    console.log("Email:", email);
     if (!email) return res.status(400).json({ error: 'Email is required' });
 
     // Generate 6-digit OTP
@@ -30,7 +31,7 @@ exports.sendOTP = async (req, res) => {
 
     // Send OTP via Brevo
     const sendSmtpEmail = {
-      sender: { name: 'LocalHelp', email: 'youremail@yourdomain.com' }, // must be verified sender
+      sender: { name: 'LocalHelp', email: 'lhteam.1008@gmail.com' }, // must be verified sender
       to: [{ email }],
       subject: 'Your One-Time Password (OTP) for LocalHelp Login',
       htmlContent: `
