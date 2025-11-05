@@ -17,7 +17,6 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
     
     if (allowedOrigins.indexOf(origin) !== -1 || origin.endsWith('.vercel.app')) {
@@ -36,14 +35,21 @@ const corsOptions = {
     'Origin'
   ],
   exposedHeaders: ['Content-Range', 'X-Content-Range'],
-  maxAge: 86400 // 24 hours
+  maxAge: 86400
 };
+
+// Apply CORS - this handles everything including OPTIONS preflight
+app.use(cors(corsOptions));
+
+
+// Body parsing middleware
+app.use(express.json({ limit: '10mb' }));
 
 // Apply CORS before other middleware
 app.use(cors(corsOptions));
 
 // Handle preflight requests
-app.options('*', cors(corsOptions));
+app.options('/*', cors(corsOptions));
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
